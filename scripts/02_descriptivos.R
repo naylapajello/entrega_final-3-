@@ -203,3 +203,176 @@ print(g_gini)
 
 ggsave(file.path(outstub, "grafico_trayectoria_gini_pbi.png"), g_gini,
        width = 10, height = 6, dpi = 300, bg = "white")
+
+# =============================================================================
+# 6. Datos faltantes y outliers
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# 6.1 Detección de datos faltantes
+# -----------------------------------------------------------------------------
+
+# Cantidad absoluta de NAs por variable:
+datos_pais |>
+  summarise(across(everything(), ~ sum(is.na(.))))
+
+# Proporción (en %) de NAs por variable numérica:
+datos_pais |>
+  summarise(across(where(is.numeric),
+                   ~ round(mean(is.na(.)) * 100, 1),
+                   .names = "pct_na_{.col}"))
+
+# El panel no presenta valores faltantes. En la etapa de limpieza
+# (01_limpieza.R) se filtraron exclusivamente los países y años con
+# cobertura completa. Para el Gini, se utilizó el año disponible más
+# cercano al objetivo cuando no existía dato exacto.
+
+# -----------------------------------------------------------------------------
+# 6.2 Exploración visual de outliers: boxplot + histograma
+# -----------------------------------------------------------------------------
+
+# Boxplot — mismo criterio que geom_boxplot(): puntos fuera de
+# [Q1 - 1.5*IQR ; Q3 + 1.5*IQR] aparecen marcados.
+
+datos_long <- datos_pais |>
+  select(pbi_percapita, gini, escolaridad, manufactura_pct_pbi) |>
+  pivot_longer(cols = everything(), names_to = "variable", values_to = "valor") |>
+  mutate(variable = recode(variable,
+    "pbi_percapita"       = "PBI per cápita (USD)",
+    "gini"                = "Índice de Gini",
+    "escolaridad"         = "Años esperados de escolaridad",
+    "manufactura_pct_pbi" = "Manufactura (% del PBI)"
+  ))
+
+g_boxplots <- ggplot(datos_long, aes(x = "", y = valor)) +
+  geom_boxplot(fill = owid_azul, alpha = 0.4,
+               outlier.colour = owid_rojo, outlier.size = 2.5) +
+  facet_wrap(~ variable, scales = "free_y", ncol = 2) +
+  theme_owid() +
+  theme(
+    axis.text.x = element_blank(),
+    strip.text  = element_text(size = 10, colour = "#5b5b5b"),
+    panel.grid.major.y = element_line(colour = "#e6e6e6", linewidth = 0.4)
+  ) +
+  labs(
+    title    = "Distribución de las variables del panel",
+    subtitle = "Los puntos en rojo indican valores fuera del rango intercuartílico.",
+    caption  = "Fuente: Banco Mundial (WDI) y Our World in Data"
+  )
+
+ggsave(file.path(outstub, "boxplots_variables.png"), g_boxplots,
+       width = 10, height = 6, dpi = 300, bg = "white")
+
+# Histograma del PBI per cápita — muestra la asimetría de la distribución
+g_hist_pbi <- datos_pais |>
+  filter(!is.na(pbi_percapita)) |>
+  ggplot(aes(x = pbi_percapita)) +
+  geom_histogram(bins = 8, fill = owid_azul, colour = "white", alpha = 0.8) +
+  scale_x_continuous(labels = label_dollar(prefix = "USD ", big.mark = ".",
+                                            decimal.mark = ",", accuracy = 1)) +
+  theme_owid() +
+  theme(panel.grid.major.x = element_line(colour = "#e6e6e6", linewidth = 0.4),
+        axis.title = element_text(colour = "#5b5b5b", size = 10)) +
+  labs(
+    title    = "Distribución del PBI per cápita en la muestra",
+    subtitle = "La cola derecha refleja la heterogeneidad entre países de alto y bajo ingreso.",
+    caption  = "Fuente: Banco Mundial (WDI)",
+    x = "PBI per cápita (USD)", y = "Frecuencia"
+  )
+
+ggsave(file.path(outstub, "histograma_pbi.png"), g_hist_pbi,
+       width = 10, height = 5, dpi = 300, bg = "white")
+
+# -----------------------------------------------------------------------------
+# 6.3 Método 1: regla del IQR (Tukey)
+# -----------------------------------------------------------------------------
+
+pbi_vec <- datos_pais$pbi_percapita[!is.na(datos_pais$pbi_percapita)]
+
+q1  <- quantile(pbi_vec, 0.25)
+q3  <- quantile(pbi_vec, 0.75)
+iqr <- IQR(pbi_vec)
+
+lim_inf <- q1 - 1.5 * iqr
+lim_sup <- q3 + 1.5 * iqr
+
+cat("Rango aceptable IQR (PBI per cápita):",
+    round(lim_inf, 0), "a", round(lim_sup, 0), "USD\n")
+
+outliers_iqr <- datos_pais |>
+  filter(!is.na(pbi_percapita),
+         pbi_percapita < lim_inf | pbi_percapita > lim_sup) |>
+  select(pais_nombre, region, pbi_percapita) |>
+  arrange(desc(pbi_percapita))
+
+outliers_iqr
+cat("Outliers detectados por IQR:", nrow(outliers_iqr), "\n")
+
+# -----------------------------------------------------------------------------
+# 6.4 Método 2: z-score
+# -----------------------------------------------------------------------------
+
+datos_pais |>
+  filter(!is.na(pbi_percapita)) |>
+  mutate(z_pbi = (pbi_percapita - mean(pbi_percapita)) / sd(pbi_percapita)) |>
+  filter(abs(z_pbi) > 3) |>
+  select(pais_nombre, region, pbi_percapita, z_pbi) |>
+  arrange(desc(z_pbi))
+
+# -----------------------------------------------------------------------------
+# 6.5 Función para comparar estadísticas antes y después
+# -----------------------------------------------------------------------------
+
+comparar_stats <- function(original, modificado, nombre_mod) {
+  o <- original[!is.na(original)]
+  m <- modificado[!is.na(modificado)]
+  tibble(
+    version = c("Original", nombre_mod),
+    n       = c(length(o),               length(m)),
+    media   = round(c(mean(o),           mean(m)),   1),
+    mediana = round(c(median(o),         median(m)), 1),
+    desvio  = round(c(sd(o),             sd(m)),     1),
+    p05     = round(c(quantile(o, .05),  quantile(m, .05)), 1),
+    p95     = round(c(quantile(o, .95),  quantile(m, .95)), 1)
+  )
+}
+
+pbi_orig  <- datos_pais$pbi_percapita
+pbi_clean <- pbi_orig[!is.na(pbi_orig) & pbi_orig >= lim_inf & pbi_orig <= lim_sup]
+
+comparar_stats(pbi_orig, pbi_clean, "Sin outliers IQR")
+
+# -----------------------------------------------------------------------------
+# 6.6 Decisión y justificación
+# -----------------------------------------------------------------------------
+# Los valores extremos identificados corresponden a diferencias reales entre
+# países y no a errores de medición. La heterogeneidad entre países es
+# precisamente el fenómeno que se analiza, por lo que se decide conservar
+# todas las observaciones sin modificación.
+
+# =============================================================================
+# 7. Estadísticas descriptivas post-tratamiento
+# =============================================================================
+
+# Como no se eliminaron ni modificaron observaciones, las estadísticas
+# post-tratamiento son idénticas a las previas. Se presenta la comparación
+# para verificar que la decisión de conservar los valores extremos no
+# distorsiona el análisis.
+
+tabla_post <- datos_pais |>
+  select(pbi_percapita, gini, escolaridad, manufactura_pct_pbi) |>
+  pivot_longer(cols = everything(), names_to = "variable", values_to = "valor") |>
+  group_by(variable) |>
+  summarise(
+    media   = round(mean(valor,   na.rm = TRUE), 2),
+    mediana = round(median(valor, na.rm = TRUE), 2),
+    sd      = round(sd(valor,     na.rm = TRUE), 2),
+    minimo  = round(min(valor,    na.rm = TRUE), 2),
+    maximo  = round(max(valor,    na.rm = TRUE), 2),
+    .groups = "drop"
+  )
+
+write_csv(tabla_post, file.path(outstub, "tabla_post_limpieza.csv"))
+
+cat("\nEstadísticas PRE-tratamiento:\n");  print(tabla_general)
+cat("\nEstadísticas POST-tratamiento:\n"); print(tabla_post)
