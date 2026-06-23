@@ -205,11 +205,11 @@ ggsave(file.path(outstub, "grafico_trayectoria_gini_pbi.png"), g_gini,
        width = 10, height = 6, dpi = 300, bg = "white")
 
 # =============================================================================
-# 6. Datos faltantes y outliers
+# Datos faltantes y outliers
 # =============================================================================
 
 # -----------------------------------------------------------------------------
-# 6.1 Detección de datos faltantes
+# Detección de datos faltantes
 # -----------------------------------------------------------------------------
 
 # Cantidad absoluta de NAs por variable:
@@ -228,7 +228,7 @@ datos_pais |>
 # cercano al objetivo cuando no existía dato exacto.
 
 # -----------------------------------------------------------------------------
-# 6.2 Exploración visual de outliers: boxplot + histograma
+# Exploración visual de outliers: boxplot + histograma
 # -----------------------------------------------------------------------------
 
 # Boxplot — mismo criterio que geom_boxplot(): puntos fuera de
@@ -284,7 +284,7 @@ ggsave(file.path(outstub, "histograma_pbi.png"), g_hist_pbi,
        width = 10, height = 5, dpi = 300, bg = "white")
 
 # -----------------------------------------------------------------------------
-# 6.3 Método 1: regla del IQR (Tukey)
+# Método 1: regla del IQR (Tukey)
 # -----------------------------------------------------------------------------
 
 pbi_vec <- datos_pais$pbi_percapita[!is.na(datos_pais$pbi_percapita)]
@@ -309,7 +309,7 @@ outliers_iqr
 cat("Outliers detectados por IQR:", nrow(outliers_iqr), "\n")
 
 # -----------------------------------------------------------------------------
-# 6.4 Método 2: z-score
+# Método 2: z-score
 # -----------------------------------------------------------------------------
 
 datos_pais |>
@@ -320,7 +320,7 @@ datos_pais |>
   arrange(desc(z_pbi))
 
 # -----------------------------------------------------------------------------
-# 6.5 Función para comparar estadísticas antes y después
+# Función para comparar estadísticas antes y después
 # -----------------------------------------------------------------------------
 
 comparar_stats <- function(original, modificado, nombre_mod) {
@@ -343,7 +343,7 @@ pbi_clean <- pbi_orig[!is.na(pbi_orig) & pbi_orig >= lim_inf & pbi_orig <= lim_s
 comparar_stats(pbi_orig, pbi_clean, "Sin outliers IQR")
 
 # -----------------------------------------------------------------------------
-# 6.6 Decisión y justificación
+# Decisión y justificación
 # -----------------------------------------------------------------------------
 # Los valores extremos identificados corresponden a diferencias reales entre
 # países y no a errores de medición. La heterogeneidad entre países es
@@ -351,7 +351,7 @@ comparar_stats(pbi_orig, pbi_clean, "Sin outliers IQR")
 # todas las observaciones sin modificación.
 
 # =============================================================================
-# 7. Estadísticas descriptivas post-tratamiento
+# Estadísticas descriptivas post-tratamiento
 # =============================================================================
 
 # Como no se eliminaron ni modificaron observaciones, las estadísticas
