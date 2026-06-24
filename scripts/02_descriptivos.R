@@ -260,6 +260,7 @@ g_boxplots <- ggplot(datos_long, aes(x = "", y = valor)) +
     caption  = "Fuente: Banco Mundial (WDI) y Our World in Data"
   )
 
+print(g_boxplots)
 ggsave(file.path(outstub, "boxplots_variables.png"), g_boxplots,
        width = 10, height = 6, dpi = 300, bg = "white")
 
@@ -280,6 +281,7 @@ g_hist_pbi <- datos_pais |>
     x = "PBI per cápita (USD)", y = "Frecuencia"
   )
 
+print(g_hist_pbi)
 ggsave(file.path(outstub, "histograma_pbi.png"), g_hist_pbi,
        width = 10, height = 5, dpi = 300, bg = "white")
 
