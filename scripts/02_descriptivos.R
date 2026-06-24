@@ -3,6 +3,8 @@ library(WDI)
 library(tidyverse)
 library(ggtext)
 library(scales)
+library(knitr)   # para kable()
+
 instub        <- "input"
 outstub_tab   <- "output/tablas"
 outstub_graf  <- "output/graficos"
@@ -43,10 +45,9 @@ theme_owid <- function(base_size = 13) {
 panel <- read_csv(file.path(instub, "panel_limpio.csv"),
                   show_col_types = FALSE)
 
-# Último año disponible por país para el gráfico
+# Último año disponible por país
 datos_pais <- panel |>
-  filter(!is.na(pbi_percapita),
-         !is.na(gini)) |>
+  filter(!is.na(pbi_percapita), !is.na(gini)) |>
   group_by(pais_codigo, pais_nombre, region) |>
   slice_max(order_by = anio, n = 1, with_ties = FALSE) |>
   ungroup()
@@ -57,11 +58,7 @@ datos_pais <- panel |>
 
 tabla_general <- datos_pais |>
   select(pbi_percapita, gini, escolaridad, manufactura_pct_pbi) |>
-  pivot_longer(
-    cols = everything(),
-    names_to = "variable",
-    values_to = "valor"
-  ) |>
+  pivot_longer(cols = everything(), names_to = "variable", values_to = "valor") |>
   group_by(variable) |>
   summarise(
     media   = round(mean(valor, na.rm = TRUE), 2),
@@ -74,6 +71,9 @@ tabla_general <- datos_pais |>
 
 write_csv(tabla_general, file.path(outstub_tab, "tabla_general.csv"))
 
+# Salida formateada en consola (para captura de pantalla)
+kable(tabla_general, format = "simple",
+      col.names = c("Variable", "Media", "Mediana", "Desvio", "Minimo", "Maximo"))
 
 # =============================================================================
 # Tabla de estadísticas descriptivas por región
@@ -82,7 +82,7 @@ write_csv(tabla_general, file.path(outstub_tab, "tabla_general.csv"))
 tabla_region <- datos_pais |>
   group_by(region) |>
   summarise(
-    n = n(),
+    n               = n(),
     media_pbi       = round(mean(pbi_percapita, na.rm = TRUE), 2),
     mediana_pbi     = round(median(pbi_percapita, na.rm = TRUE), 2),
     sd_pbi          = round(sd(pbi_percapita, na.rm = TRUE), 2),
@@ -95,7 +95,13 @@ tabla_region <- datos_pais |>
 
 write_csv(tabla_region, file.path(outstub_tab, "tabla_region.csv"))
 
-# --- Gráfico -----------------------------------------------------------------
+# Salida formateada por region
+kable(tabla_region, format = "simple")
+
+# =============================================================================
+# Gráfico 1: Dispersión Gini — PBI per cápita (con recta de tendencia)
+# =============================================================================
+
 max_gini <- datos_pais |> slice_max(gini, n = 1, with_ties = FALSE)
 
 g_gini <- ggplot(datos_pais, aes(x = gini, y = pbi_percapita)) +
@@ -103,29 +109,26 @@ g_gini <- ggplot(datos_pais, aes(x = gini, y = pbi_percapita)) +
               colour = "#1d1d1d", fill = "#c9c9c9",
               linewidth = 0.8, alpha = 0.2) +
   geom_point(aes(colour = region), size = 3.5, alpha = 0.9) +
-  geom_text(aes(label = pais_nombre), hjust = -0.15, size = 2.8, colour = "#5b5b5b") +
+  geom_text(aes(label = pais_nombre), hjust = -0.15, size = 2.8,
+            colour = "#5b5b5b") +
   annotate("text",
            x = max_gini$gini - 2, y = max_gini$pbi_percapita * 1.2,
            label = "Mayor desigualdad\nde la muestra",
            hjust = 1, size = 2.8, colour = owid_rojo, lineheight = 0.9) +
   annotate("segment",
-           x = max_gini$gini - 4, y = max_gini$pbi_percapita * 1.45,
+           x = max_gini$gini - 4,   y = max_gini$pbi_percapita * 1.45,
            xend = max_gini$gini - 0.6, yend = max_gini$pbi_percapita * 1.03,
            linewidth = 0.4, colour = owid_rojo,
            arrow = arrow(length = unit(2, "mm"), type = "closed")) +
-  scale_y_log10(
-    labels = label_dollar(prefix = "USD ",
-                          big.mark = ".",
-                          decimal.mark = ",",
-                          accuracy = 1)
-  ) +
-  scale_colour_brewer(palette = "Set1", name = "Región") +
+  scale_y_log10(labels = label_dollar(prefix = "USD ", big.mark = ".",
+                                      decimal.mark = ",", accuracy = 1)) +
+  scale_colour_brewer(palette = "Set1", name = "Region") +
   labs(
-    title = "Los países de mayor ingreso presentan menor desigualdad en la muestra",
-    subtitle = "PBI per cápita en USD constantes de 2015, escala logarítmica. Último año disponible por país.",
+    title    = "Los paises de mayor ingreso presentan menor desigualdad en la muestra",
+    subtitle = "PBI per capita en USD constantes de 2015, escala logaritmica. Ultimo anio disponible por pais.",
     caption  = "Fuente: Banco Mundial (WDI)",
-    x        = "Índice de Gini",
-    y        = "PBI per cápita (USD)"
+    x        = "Indice de Gini",
+    y        = "PBI per capita (USD)"
   ) +
   theme_owid() +
   theme(
@@ -142,50 +145,43 @@ ggsave(file.path(outstub_graf, "grafico_gini_pbi.png"), g_gini,
        width = 10, height = 6, dpi = 300, bg = "white")
 
 # =============================================================================
-# Gráfico 1: Desarrollo económico y desigualdad (connected scatter plot)
+# Gráfico 2: Trayectoria escolaridad — PBI per cápita (2005 → 2015 → 2022)
 # =============================================================================
 
-datos_g1 <- panel |>
+datos_tray <- panel |>
   filter(anio %in% c(2005, 2015, 2022),
          !is.na(pbi_percapita),
-         !is.na(gini)) |>
+         !is.na(escolaridad)) |>
   arrange(pais_nombre, anio)
 
-etiquetas_finales <- datos_g1 |>
+etiquetas_tray <- datos_tray |>
   group_by(pais_codigo, pais_nombre, region) |>
   slice_max(order_by = anio, n = 1, with_ties = FALSE) |>
   ungroup()
 
-g_gini <- ggplot(
-  datos_g1,
-  aes(x = pbi_percapita, y = gini,
+g_tray <- ggplot(
+  datos_tray,
+  aes(x = escolaridad, y = pbi_percapita,
       group = pais_nombre, colour = region)
 ) +
   geom_line(alpha = 0.6, linewidth = 0.7) +
   geom_point(aes(shape = factor(anio)), size = 2.5, alpha = 0.9) +
   geom_text(
-    data = etiquetas_finales,
+    data = etiquetas_tray,
     aes(label = pais_nombre),
     hjust = -0.1, size = 2.7, colour = "#5b5b5b",
     show.legend = FALSE
   ) +
-  scale_x_log10(
-    labels = label_dollar(
-      prefix = "USD ",
-      big.mark = ".",
-      decimal.mark = ",",
-      accuracy = 1
-    )
-  ) +
-  scale_y_continuous(limits = c(0, NA)) +
-  scale_colour_brewer(palette = "Set1", name = "Región") +
-  scale_shape_discrete(name = "Año") +
+  scale_y_log10(labels = label_dollar(prefix = "USD ", big.mark = ".",
+                                      decimal.mark = ",", accuracy = 1)) +
+  scale_colour_brewer(palette = "Set1", name = "Region") +
+  scale_shape_discrete(name = "Anio") +
   labs(
-    title = "A mayor desarrollo, la desigualdad tiende a concentrarse en niveles más bajos",
-    subtitle = "Cada línea conecta la trayectoria de un país entre 2005, 2015 y 2022. PBI per cápita en USD constantes de 2015, escala logarítmica.",
-    caption = "Fuente: Banco Mundial (WDI)",
-    x = "PBI per cápita",
-    y = "Índice de Gini"
+    title    = "Mas educacion se asocia con mayor PBI per capita",
+    subtitle = "Cada linea conecta la trayectoria de un pais entre 2005, 2015 y 2022. PBI en USD 2015, escala logaritmica.",
+    caption  = "Fuente: Banco Mundial (WDI) y Our World in Data",
+    x        = "Anos esperados de escolaridad",
+    y        = "PBI per capita (USD)"
   ) +
   theme_owid() +
   theme(
@@ -201,18 +197,13 @@ g_gini <- ggplot(
     shape  = guide_legend(order = 2)
   )
 
-print(g_gini)
-
-ggsave(file.path(outstub_graf, "grafico_trayectoria_gini_pbi.png"), g_gini,
+print(g_tray)
+ggsave(file.path(outstub_graf, "grafico_trayectoria_gini_pbi.png"), g_tray,
        width = 10, height = 6, dpi = 300, bg = "white")
 
 # =============================================================================
 # Datos faltantes y outliers
 # =============================================================================
-
-# -----------------------------------------------------------------------------
-# Detección de datos faltantes
-# -----------------------------------------------------------------------------
 
 # Cantidad absoluta de NAs por variable:
 datos_pais |>
@@ -233,16 +224,13 @@ datos_pais |>
 # Exploración visual de outliers: boxplot + histograma
 # -----------------------------------------------------------------------------
 
-# Boxplot — mismo criterio que geom_boxplot(): puntos fuera de
-# [Q1 - 1.5*IQR ; Q3 + 1.5*IQR] aparecen marcados.
-
 datos_long <- datos_pais |>
   select(pbi_percapita, gini, escolaridad, manufactura_pct_pbi) |>
   pivot_longer(cols = everything(), names_to = "variable", values_to = "valor") |>
   mutate(variable = recode(variable,
-    "pbi_percapita"       = "PBI per cápita (USD)",
-    "gini"                = "Índice de Gini",
-    "escolaridad"         = "Años esperados de escolaridad",
+    "pbi_percapita"       = "PBI per capita (USD)",
+    "gini"                = "Indice de Gini",
+    "escolaridad"         = "Anos esperados de escolaridad",
     "manufactura_pct_pbi" = "Manufactura (% del PBI)"
   ))
 
@@ -257,8 +245,8 @@ g_boxplots <- ggplot(datos_long, aes(x = "", y = valor)) +
     panel.grid.major.y = element_line(colour = "#e6e6e6", linewidth = 0.4)
   ) +
   labs(
-    title    = "Distribución de las variables del panel",
-    subtitle = "Los puntos en rojo indican valores fuera del rango intercuartílico.",
+    title    = "Distribucion de las variables del panel",
+    subtitle = "Los puntos en rojo indican valores fuera del rango intercuartilico.",
     caption  = "Fuente: Banco Mundial (WDI) y Our World in Data"
   )
 
@@ -266,7 +254,6 @@ print(g_boxplots)
 ggsave(file.path(outstub_graf, "boxplots_variables.png"), g_boxplots,
        width = 10, height = 6, dpi = 300, bg = "white")
 
-# Histograma del PBI per cápita — muestra la asimetría de la distribución
 g_hist_pbi <- datos_pais |>
   filter(!is.na(pbi_percapita)) |>
   ggplot(aes(x = pbi_percapita)) +
@@ -277,10 +264,10 @@ g_hist_pbi <- datos_pais |>
   theme(panel.grid.major.x = element_line(colour = "#e6e6e6", linewidth = 0.4),
         axis.title = element_text(colour = "#5b5b5b", size = 10)) +
   labs(
-    title    = "Distribución del PBI per cápita en la muestra",
-    subtitle = "La cola derecha refleja la heterogeneidad entre países de alto y bajo ingreso.",
+    title    = "Distribucion del PBI per capita en la muestra",
+    subtitle = "La cola derecha refleja la heterogeneidad entre paises de alto y bajo ingreso.",
     caption  = "Fuente: Banco Mundial (WDI)",
-    x = "PBI per cápita (USD)", y = "Frecuencia"
+    x = "PBI per capita (USD)", y = "Frecuencia"
   )
 
 print(g_hist_pbi)
@@ -300,7 +287,7 @@ iqr <- IQR(pbi_vec)
 lim_inf <- q1 - 1.5 * iqr
 lim_sup <- q3 + 1.5 * iqr
 
-cat("Rango aceptable IQR (PBI per cápita):",
+cat("Rango aceptable IQR (PBI per capita):",
     round(lim_inf, 0), "a", round(lim_sup, 0), "USD\n")
 
 outliers_iqr <- datos_pais |>
@@ -346,22 +333,12 @@ pbi_clean <- pbi_orig[!is.na(pbi_orig) & pbi_orig >= lim_inf & pbi_orig <= lim_s
 
 comparar_stats(pbi_orig, pbi_clean, "Sin outliers IQR")
 
-# -----------------------------------------------------------------------------
-# Decisión y justificación
-# -----------------------------------------------------------------------------
-# Los valores extremos identificados corresponden a diferencias reales entre
-# países y no a errores de medición. La heterogeneidad entre países es
-# precisamente el fenómeno que se analiza, por lo que se decide conservar
-# todas las observaciones sin modificación.
+# Decisión: los valores extremos son reales (no errores de medición).
+# Se conservan todas las observaciones.
 
 # =============================================================================
 # Estadísticas descriptivas post-tratamiento
 # =============================================================================
-
-# Como no se eliminaron ni modificaron observaciones, las estadísticas
-# post-tratamiento son idénticas a las previas. Se presenta la comparación
-# para verificar que la decisión de conservar los valores extremos no
-# distorsiona el análisis.
 
 tabla_post <- datos_pais |>
   select(pbi_percapita, gini, escolaridad, manufactura_pct_pbi) |>
@@ -378,5 +355,10 @@ tabla_post <- datos_pais |>
 
 write_csv(tabla_post, file.path(outstub_tab, "tabla_post_limpieza.csv"))
 
-cat("\nEstadísticas PRE-tratamiento:\n");  print(tabla_general)
-cat("\nEstadísticas POST-tratamiento:\n"); print(tabla_post)
+cat("\nEstadisticas PRE-tratamiento:\n")
+kable(tabla_general, format = "simple",
+      col.names = c("Variable", "Media", "Mediana", "Desvio", "Minimo", "Maximo"))
+
+cat("\nEstadisticas POST-tratamiento:\n")
+kable(tabla_post, format = "simple",
+      col.names = c("Variable", "Media", "Mediana", "Desvio", "Minimo", "Maximo"))
