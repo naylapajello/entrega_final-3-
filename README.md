@@ -4,7 +4,7 @@
 
 ## Descripción
 
-Este repositorio contiene el análisis empírico de los determinantes del desarrollo económico en una muestra de 12 países para los años 2005, 2015 y 2022.
+Trabajo sobre el análisis empírico de los determinantes del desarrollo económico en una muestra de 12 países para los años 2005, 2015 y 2022.
 
 La hipótesis principal sostiene que los países con mayores niveles de capital humano y una estructura económica más desarrollada tienden a presentar mayores niveles de PBI per cápita, mientras que una mayor desigualdad se asocia con menores niveles de desarrollo económico. Como hipótesis secundaria, se plantea que existen diferencias significativas en el PBI per cápita entre regiones del mundo.
 
@@ -29,6 +29,18 @@ La hipótesis principal sostiene que los países con mayores niveles de capital 
 | Región                        | Control     | Elaboración propia            | —             |
 
 **Nota sobre el Gini:** para Egipto (2005 y 2022) y Sudáfrica (2015) no existe dato exacto en el año objetivo; se utilizó el año disponible más cercano.
+
+## Principales hallazgos
+
+- El PBI per cápita aumentó significativamente entre 2005 y 2022 (test t pareado).
+- Se observa una asociación negativa entre desigualdad y PBI per cápita.
+- Los países con mayor escolaridad tienden a presentar mayores ingresos, aunque con diferencias según región.
+- Europa concentra los mayores niveles de educación e ingreso; África registra los menores.
+- No se encontraron diferencias estadísticamente significativas entre regiones al 5% (ANOVA), en parte por el tamaño reducido de la muestra.
+
+## Limitaciones
+
+La muestra es reducida (12 países) y los datos están agregados a nivel país. No se incluyen variables institucionales o políticas. Los valores extremos en PBI per cápita y manufactura fueron conservados por reflejar diferencias reales entre economías, no errores de medición.
 
 ## Estructura del repositorio
 
@@ -60,10 +72,10 @@ scripts/04_anova.R          → ANOVA por región
 scripts/05_regresion.R      → regresión múltiple
 ```
 
-**Paquetes necesarios:** `tidyverse`, `janitor`, `scales`, `ggtext`, `rstatix`
+**Paquetes necesarios:** `tidyverse`, `janitor`, `scales`, `ggtext`, `knitr`
 
 ## Participantes
-### Nombres y apellidos
-Luciana Benitez - 911.471
-Francisco Guerra - 903.014
-Nayla Pajello - 912.680
+
+Luciana Benitez — 911.471  
+Francisco Guerra — 903.014  
+Nayla Pajello — 912.680  
